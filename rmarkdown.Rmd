@@ -1,0 +1,150 @@
+---
+title: "NY Covid-19 Data Report"
+author: "Yao Xiao"
+date: "29/12/2021"
+output: html_document
+runtime: shiny
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(shinythemes)
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(shiny)
+library(dplyr)
+library(tidyr)
+library(mice)
+library(shinyWidgets)
+library(rmarkdown)
+library(kableExtra)
+
+#Initial data gathering and analytics period
+#read files in and change the string value to data
+dataNY <- read_csv("new-york-history.csv")
+# NYcovid <- dataNY %>% mutate(date = dmy(date))
+dataNY$date <- as.POSIXct(dataNY$date, format = "%d/%m/%Y")
+dataNY <- subset(dataNY, select=c("date", "state", "death", "hospitalizedCurrently", "inIcuCurrently", "positive"))
+NYcovidata <-dataNY
+# NYcovid <- dataNY
+# #imputate the missing value (be aware may only be useful in numerical data)
+# NYcovidstatstemp <- subset(NYcovid, select = c("death","hospitalizedCurrently"))
+# tempData <- mice(NYcovidstatstemp,meth="cart")
+# NYcovidata <- complete(tempData) 
+# NYcovidata <- transform (NYcovidata, date = NYcovid$date, state = NYcovid$state)
+```
+***
+
+## Brief Introduction
+```{r greeting, echo=FALSE}
+  textInput("name", "Hey, what's your name?")
+  renderText ({
+    paste ("Hello, ", input$name, "nice to meet you. This interactive report showcases the dashboard of covid statistics from March 2020 to March 2021 in the NewYork city. Let's start!", sep=" ")
+    })
+```
+To view the full code of Rshiny, please visit [yaoyaorun](https://github.com/yaoyaorun)
+
+### Summary of the dataset
+```{r covid}
+kable(head(summary(dataNY)))
+```
+***
+
+## Customize the input data
+
+```{r input, echo=FALSE}
+
+    df1 <- subset(NYcovidata, select=c(date, state, death))
+    df2 <- subset(NYcovidata, select=c(date, state, hospitalizedCurrently))
+    df3 <- subset(NYcovidata, select=c(date, state, death, hospitalizedCurrently))
+  NYcovidata1 <- ({
+    NYcovidata %>%
+    select (date, death) %>%
+    gather (key = "variable", value = "covidresult", -date)
+    })
+  NYcovidata2 <- ({
+    NYcovidata %>%
+    select (date, hospitalizedCurrently) %>%
+    gather (key = "variable", value = "covidresult", -date)
+    })
+  NYcovidata3 <- ({
+    NYcovidata %>%
+    select (date, death, hospitalizedCurrently) %>%
+    gather (key = "variable", value = "covidresult", -date)
+    })
+ renderUI({
+    dateRangeInput("date", "Select the date range:",
+                   start =
+                     as.character(format(as.Date(min(NYcovidata$date))),"yyyy-mm-dd"), # Start
+                   end =
+                     as.character(format(as.Date(max(NYcovidata$date))),"yyyy-mm-dd"), # End
+                   min =
+                     as.character(format(as.Date(min(NYcovidata$date))),"yyyy-mm-dd"),
+                   max =
+                     as.character(format(as.Date(max(NYcovidata$date))),"yyyy-mm-dd"),
+                   format = "yyyy-mm-dd")
+ })
+ 
+selectInput("df", "What data do you want to look at?", choices = c("death", "hospitalizedCurrently"), multiple = TRUE)
+
+  
+```
+***
+## Results
+
+### Interactive Plot Output
+
+```{r plot, echo = FALSE}
+
+renderPlot ({
+    value <- isolate(input$df)
+    if (identical(input$df,"death")) {
+      NYcovidata1 <- subset(NYcovidata1, date >= as.Date(input$date[1]) & date <=
+                      as.Date(input$date[2]))
+      gg1 <- ggplot(NYcovidata1, aes(x = date, y = covidresult)) + geom_line(aes(color = variable), size = 1) + scale_color_manual(values = "#181d2a") + theme_minimal()
+      print(gg1)}
+    else if(identical(input$df,"hospitalizedCurrently")) {
+      NYcovidata2 <- subset(NYcovidata2, date >= as.Date(input$date[1]) & date <=
+                              as.Date(input$date[2]))
+      gg2 <- ggplot(NYcovidata2, aes(x = date, y = covidresult)) + geom_line(aes(color = variable), size = 1) + scale_color_manual(values = "#2e74b7") + theme_minimal()
+      print(gg2)}
+    else if (identical(input$df, c("death", "hospitalizedCurrently" )) | identical(input$df, c("hospitalizedCurrently","death" ))) {
+      NYcovidata3 <- subset(NYcovidata3, date >= as.Date(input$date[1]) & date <=
+                              as.Date(input$date[2]))
+      gg3 <- ggplot(NYcovidata3, aes(x = date, y = covidresult)) + geom_line(aes(color = variable), size = 1) + scale_color_manual(values = c("#2e74b7", "#181d2a")) + theme_minimal()
+      print(gg3)}
+  })
+```
+
+### Interactive Datatable Output
+
+```{r table, echo = FALSE}
+renderDataTable ({
+    value <- isolate(input$df)
+    if (identical(input$df,NULL)) {
+      print("please select at least an attribute!")
+    }
+    else if(identical(input$df,"death")) {
+      df1 <- subset(df1, date >= as.Date(input$date[1]) & date <=
+                         as.Date(input$date[2]))
+      df1$date <- as.character(df1$date)
+      print(df1)
+    }
+    else if(identical(input$df,"hospitalizedCurrently")) {
+      df2 <- subset(df2, date >= as.Date(input$date[1]) & date <=
+                      as.Date(input$date[2]))
+      df2$date <- as.character(df2$date)
+      print(df2)
+    }
+    else if (identical(input$df, c("death", "hospitalizedCurrently" )) | identical(input$df, c("hospitalizedCurrently","death" ))) {
+      df3 <- subset(df3, date >= as.Date(input$date[1]) & date <=
+                      as.Date(input$date[2]))
+      df3$date <- as.character(df3$date)
+      print(df3)
+    }
+  }, options = list(pageLength = 25)
+     )
+```
+
+@copyright:yaoyaorun2021
